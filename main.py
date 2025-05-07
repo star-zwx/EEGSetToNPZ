@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 from mainWindows import Ui_MainWindow
 from scipy.io import loadmat
 import numpy as np
+import ast
 
 
 class Read_SetData:
@@ -168,6 +169,7 @@ class my_MainWindow(QtWidgets.QMainWindow):
         # 点击导入多个mat文件
         options = QFileDialog.Options()
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder", "", options=options)
+        self.single_group = False
 
         if folder_path:
             try:
@@ -181,51 +183,35 @@ class my_MainWindow(QtWidgets.QMainWindow):
                 self.ui.lineEdit_filepath.setText(folder_path)
                 self.ui.lineEdit_fileType.setText("mat文件组")
                 self.ui.textEdit_InforPrint.setText(folder_path + "文件加载完成！\n")
-
-                # 先加载数据到局部变量中，在循环中每次实例化后，计算完成之后都要delete对象以免内存爆炸
-                # 这里根据获取的文件夹先构造出被试文件夹路径
-                for current_folder in folders:
-
-                    sub_folder_path = os.path.join(folder_path, current_folder)
-                    # 读取该路径下的所有mat文件，保存在列表中
-                    sub_mat_files = glob.glob(os.path.join(sub_folder_path, "*.mat"))
-
-                    print(sub_mat_files)
-                    # 遍历这个列表，依次去取值（最好一个被试文件夹中只有一个文件）
-                    # 不支持一个被试多个文件的情况
-                    sub_mat_file = sub_mat_files[0]
-                    if sub_mat_file:
-                        try:
-                            current_mat_data = Read_Mat(sub_mat_file)
-                            # 将加载的数据保存在局部变量中
-                            self.mat_file_grpdata.append(current_mat_data.get_data())  # 每个trials的数据
-                            self.mat_file_grpevent.append(np.array(current_mat_data.get_event_list()))  # 每个trials
-                            # 的标签（经过映射的）
-                            self.ui.textEdit.append(
-                                "加载数据成功~\n数据形状：{},标签形状：{}".format(self.mat_file_onedata[0].shape,
-                                                                                self.mat_file_grpevent[
-                                                                                    0].shape))
-
-                            del current_mat_data
-
-
-                        except Exception as e:
-                            print(e)
-
-                    # 读取文件中的mat文件
-
-
-
-
-
-
+                # 以下的做法可能导入出现问题，可根据加载的信息构建路径，在点击开始的时候在开始处理
 
             except Exception as e:
                 print(e)
 
     def on_ImSetGrpClicked(self):
         # 点击导入多个set文件
-        pass
+        # 点击导入多个mat文件
+        options = QFileDialog.Options()
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Folder", "", options=options)
+        self.single_group = False
+
+        if folder_path:
+            try:
+                # 获取该文件夹下的子文件夹，用列表呈现
+                # 获取路径下的所有条目
+                entries = os.listdir(folder_path)
+                # 过滤出文件夹
+                folders = [entry for entry in entries if os.path.isdir(os.path.join(folder_path, entry))]
+                # 呈现格式
+                self.ui.lineEdit_filename.setText("{}".format(folders))
+                self.ui.lineEdit_filepath.setText(folder_path)
+                self.ui.lineEdit_fileType.setText("set文件组")
+                self.ui.textEdit_InforPrint.setText(folder_path + "文件加载完成！\n")
+                # 以下的做法可能导入出现问题，可根据加载的信息构建路径，在点击开始的时候在开始处理
+
+            except Exception as e:
+                print(e)
+
 
     def on_SavePathClicked(self):
         options = QFileDialog.Options()
@@ -259,13 +245,75 @@ class my_MainWindow(QtWidgets.QMainWindow):
                 self.save_path = self.ui.lineEdit.text()
                 if self.ui.radioButton_setToMat.isChecked():
                     # set转npz模式
-                    pass
+                    # 根据填进文本框中的信息依次读取每个被试的文件
+                    # 读取文本框中的文本，通过文本构建加载路径并在循环中处理
+                    # 获取总的文件夹:
+                    root_path1 = self.ui.lineEdit_filepath.text()
+                    # 获取被试文件夹名称存在列表中用以构建文件路径
+                    sub_root_path1 = ast.literal_eval(self.ui.lineEdit_filename.text())
+
+                    # 使用for循环构建文件名并且读取文件信息
+
+                    for one_sub in sub_root_path1:
+                        # 构造路径
+                        path_name = os.path.join(root_path1, one_sub)
+                        # 寻找该路径下的mat文件
+                        mat_files = glob.glob(os.path.join(path_name, "*.set"))
+                        # 只加载第一个mat文件，默认也只有一个mat文件
+                        if mat_files[0]:
+                            try:
+                                set_data = Read_SetData(mat_files[0])
+                                self.set_file_grpdata.append(set_data.get_data())  # 每个trials的数据
+                                self.set_file_grpevent.append(np.array(set_data.get_event_list()))  # 每个trials的标签（经过映射的）
+                                # 释放
+                                del set_data
+                            except Exception as e:
+                                print(e)
+
+                    # 将经过加载的数据进行转换
+                    # mat 转换为npz模式
+                    self.get_group_results(data_list=self.set_file_grpdata,
+                                           event_list=self.set_file_grpevent,
+                                           output_dir=self.save_path,
+                                           sub_list=sub_root_path1)
+
                 else:
                     # mat转npz模式
-                    pass
                     # 根据填进文本框中的信息依次读取每个被试的文件
+                    # 读取文本框中的文本，通过文本构建加载路径并在循环中处理
+                    # 获取总的文件夹:
+                    root_path = self.ui.lineEdit_filepath.text()
+                    # 获取被试文件夹名称存在列表中用以构建文件路径
+                    sub_root_path = ast.literal_eval(self.ui.lineEdit_filename.text())
 
-            pass
+                    # 使用for循环构建文件名并且读取文件信息
+
+                    for one_sub in sub_root_path:
+                        # 构造路径
+                        path_name = os.path.join(root_path, one_sub)
+                        # 寻找该路径下的mat文件
+                        mat_files = glob.glob(os.path.join(path_name, "*.mat"))
+                        # 只加载第一个mat文件，默认也只有一个mat文件
+                        if mat_files[0]:
+                            try:
+                                mat_data = Read_Mat(mat_files[0])
+                                self.mat_file_grpdata.append(mat_data.get_data())  # 每个trials的数据
+                                self.mat_file_grpevent.append(np.array(mat_data.get_event_list()))  # 每个trials的标签（经过映射的）
+                                # 释放
+                                del mat_data
+                            except Exception as e:
+                                print(e)
+
+                    # 将经过加载的数据进行转换
+                    # mat 转换为npz模式
+                    self.get_group_results(data_list=self.mat_file_grpdata,
+                                           event_list=self.mat_file_grpevent,
+                                           output_dir=self.save_path,
+                                           sub_list=sub_root_path)
+                    # print("数据：",self.mat_file_grpevent, self.mat_file_grpdata)
+
+
+
         # 结束后将变量重置
         self.save_path = ''
         self.set_file_onedata = []
@@ -293,6 +341,20 @@ class my_MainWindow(QtWidgets.QMainWindow):
         with open(os.path.join(output_dir, f'event_dict.txt'), 'w') as f:
             dict_str = ', '.join([f'{key}: {value}' for key, value in self.event_dict.items()])
             f.writelines(dict_str)
+
+    def get_group_results(self, data_list, event_list, output_dir, sub_list):
+        assert len(event_list) == len(data_list)
+        for i, sub_name in zip(range(len(data_list)), sub_list):
+            # 这里构建被试文件夹
+            sub_folder = os.path.join(output_dir, sub_name)
+            if not os.path.exists(sub_folder):
+                os.makedirs(sub_folder)
+            data = data_list[i]
+            label = event_list[i]
+            for j in range(data.shape[0]):
+                file_name = os.path.join(sub_folder, f'sample_{j}.npz')
+                np.savez(file_name, data=data[j].T, label=label[j])
+                self.ui.textEdit.append("{} 保存完成".format(file_name))
 
 
 if __name__ == "__main__":
