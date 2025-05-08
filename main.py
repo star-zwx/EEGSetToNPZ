@@ -8,7 +8,8 @@ from mainWindows import Ui_MainWindow
 from scipy.io import loadmat
 import numpy as np
 import ast
-
+import subprocess
+import winreg
 
 class Read_SetData:
     def __init__(self, file_path):
@@ -70,6 +71,47 @@ class Read_Mat:
 
         return datalist
 
+def find_matlab_path():
+    try:
+        # 尝试从注册表中获取MATLAB的安装路径
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\MathWorks\MATLAB\Latest\MATLAB")
+        matlab_path, _ = winreg.QueryValueEx(key, "MATLABROOT")
+        winreg.CloseKey(key)
+        return matlab_path
+    except WindowsError:
+        # 如果注册表中没有找到，尝试从环境变量中获取
+        matlab_path = os.environ.get("MATLAB_PATH")
+        if matlab_path:
+            return matlab_path
+        else:
+            return None
+
+
+def using_eeglabClicked():
+    # 弹窗提示是否打开matlab，如果点击是则打开
+    try:
+        # 这里假设MATLAB的可执行文件在系统路径中
+        reply = QMessageBox.question(
+            None, '提示', '你想打开MATLAB吗？',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            matlab_path = find_matlab_path()
+            if matlab_path:
+                matlab_exe = os.path.join(matlab_path, "bin", "matlab.exe")
+                try:
+                    subprocess.Popen([matlab_exe])
+                except Exception as e:
+                    print(f"无法打开MATLAB: {e}")
+            else:
+                print("未找到MATLAB的安装路径")
+        else:
+            print("用户选择不打开MATLAB")
+        subprocess.Popen(['matlab'])
+    except Exception as e:
+        print(f"无法打开MATLAB: {e}")
+
 
 class my_MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
@@ -98,6 +140,8 @@ class my_MainWindow(QtWidgets.QMainWindow):
         self.ui.actiongroup_files_2.triggered.connect(self.on_ImMatGrpClicked)
         self.ui.pushButton_start.clicked.connect(self.on_StartClicked)
         self.ui.pushButton_savepath.clicked.connect(self.on_SavePathClicked)
+        self.ui.actionCheck_Data_npz.triggered.connect(self.on_CheckDataNpzClicked)
+        self.ui.actionusing_eeglab_of_matlab.triggered.connect(self.on_using_eeglabClicked)
 
     def on_ImSetClicked(self):
         # 打开文件选择对话框，只能选择.set文件
@@ -182,6 +226,7 @@ class my_MainWindow(QtWidgets.QMainWindow):
                 self.ui.lineEdit_filename.setText("{}".format(folders))
                 self.ui.lineEdit_filepath.setText(folder_path)
                 self.ui.lineEdit_fileType.setText("mat文件组")
+
                 self.ui.textEdit_InforPrint.setText(folder_path + "文件加载完成！\n")
                 # 以下的做法可能导入出现问题，可根据加载的信息构建路径，在点击开始的时候在开始处理
 
@@ -190,7 +235,7 @@ class my_MainWindow(QtWidgets.QMainWindow):
 
     def on_ImSetGrpClicked(self):
         # 点击导入多个set文件
-        # 点击导入多个mat文件
+
         options = QFileDialog.Options()
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder", "", options=options)
         self.single_group = False
@@ -211,7 +256,6 @@ class my_MainWindow(QtWidgets.QMainWindow):
 
             except Exception as e:
                 print(e)
-
 
     def on_SavePathClicked(self):
         options = QFileDialog.Options()
@@ -312,8 +356,6 @@ class my_MainWindow(QtWidgets.QMainWindow):
                                            sub_list=sub_root_path)
                     # print("数据：",self.mat_file_grpevent, self.mat_file_grpdata)
 
-
-
         # 结束后将变量重置
         self.save_path = ''
         self.set_file_onedata = []
@@ -355,6 +397,38 @@ class my_MainWindow(QtWidgets.QMainWindow):
                 file_name = os.path.join(sub_folder, f'sample_{j}.npz')
                 np.savez(file_name, data=data[j].T, label=label[j])
                 self.ui.textEdit.append("{} 保存完成".format(file_name))
+
+    def on_CheckDataNpzClicked(self):
+        # 点击后打开文件选择.npz文件
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(self, "Open SET File", "", "SET Files (*.npz);;All Files (*)",
+                                                   options=options)
+        if file_name:
+            try:
+                # 打开npz文件
+                npz_data = np.load(file_name, allow_pickle=True)
+                data_shape = npz_data['data'].shape
+                label_shape = npz_data['label'].shape
+                data = npz_data['data']
+                label = npz_data['label']
+                # 将信息打印在输出框中
+                self.ui.textEdit.append("数据加载成功：{}".format(file_name))
+                self.ui.textEdit.append("数据维度：{}".format(data_shape))
+                self.ui.textEdit.append("标签维度：{}".format(label_shape))
+                self.ui.textEdit.append("数据：{}".format(data))
+                self.ui.textEdit.append("标签：{}".format(label))
+                # 呈现格式
+                self.ui.lineEdit_filename.setText("{}".format(file_name.split('/')[-1]))
+                self.ui.lineEdit_filepath.setText(file_name)
+                self.ui.lineEdit_fileType.setText("npz文件")
+                self.ui.lineEdit_numChannels.setText(str(data_shape[-1]))
+                self.ui.textEdit_InforPrint.setText(file_name + "文件加载完成！\n")
+
+            except Exception as e:
+                print(e)
+
+    def on_using_eeglabClicked(self):
+        using_eeglabClicked()
 
 
 if __name__ == "__main__":
