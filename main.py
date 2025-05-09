@@ -10,6 +10,7 @@ import numpy as np
 import ast
 import subprocess
 import winreg
+from tools.viewdatapolt import *
 
 class Read_SetData:
     def __init__(self, file_path):
@@ -118,6 +119,7 @@ class my_MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         # 创建 UI 对象
 
+        self.eeg_window = None
         self.ui = Ui_MainWindow()
         # 设置 UI
         self.ui.setupUi(self)
@@ -423,6 +425,11 @@ class my_MainWindow(QtWidgets.QMainWindow):
                 self.ui.lineEdit_fileType.setText("npz文件")
                 self.ui.lineEdit_numChannels.setText(str(data_shape[-1]))
                 self.ui.textEdit_InforPrint.setText(file_name + "文件加载完成！\n")
+
+                self.eeg_window = EEGPlotWidget(eeg_data=data, fs=250, window_sec=5)
+                self.eeg_window.setWindowTitle("EEG Viewer")
+                self.eeg_window.resize(1000, 600)
+                self.eeg_window.show()
 
             except Exception as e:
                 print(e)
